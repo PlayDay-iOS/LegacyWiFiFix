@@ -1,0 +1,7 @@
+.git
+.github
+.theos
+build
+output
+packages
+*.deb

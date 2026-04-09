@@ -1,0 +1,7 @@
+services:
+  build:
+    build:
+      context: .
+      dockerfile: Containerfile
+    volumes:
+      - .:/build:Z

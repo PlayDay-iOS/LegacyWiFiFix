@@ -1,0 +1,31 @@
+{
+  "name": "WiFi Fix Old iOS",
+  "build": {
+    "dockerfile": "../Containerfile"
+  },
+  "remoteUser": "builder",
+  "workspaceFolder": "/build",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/build,type=bind",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "tale.logos-vscode",
+        "ms-vscode.cpptools",
+        "ms-vscode.makefile-tools"
+      ],
+      "settings": {
+        "C_Cpp.default.includePath": [
+          "/opt/theos/sdks/iPhoneOS10.3.sdk/usr/include",
+          "/opt/theos/include"
+        ],
+        "C_Cpp.default.defines": [
+          "__IPHONE_OS_VERSION_MIN_REQUIRED=100000"
+        ],
+        "files.associations": {
+          "*.x": "logos",
+          "*.xm": "logos"
+        }
+      }
+    }
+  }
+}

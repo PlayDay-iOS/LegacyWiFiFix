@@ -1,0 +1,9 @@
+Package: dev.playday3008.wififixoldios
+Name: WiFi Fix Old iOS
+Version: 0.0.1
+Architecture: iphoneos-arm
+Description: An awesome MobileSubstrate tweak!
+Maintainer: PlayDay
+Author: PlayDay
+Section: Tweaks
+Depends: mobilesubstrate (>= 0.9.5000)

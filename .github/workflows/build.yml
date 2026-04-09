@@ -1,0 +1,24 @@
+name: Build .deb
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build container image
+        run: docker build -t wififix-build -f Containerfile .
+
+      - name: Build .deb package
+        run: docker run --rm -v "$PWD:/build:Z" wififix-build
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: deb-package
+          path: packages/*.deb
