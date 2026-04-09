@@ -1,7 +1,7 @@
 /*
- * WiFi Fix Old iOS — WPA2/WPA3 Transitional Mode Fix for iOS 10.x
+ * WiFi Fix Old iOS — WPA2/WPA3 Transitional Mode Fix for iOS 9.x–12.x
  *
- * Problem: iOS 10's wifid cannot connect to WPA2/WPA3 transitional networks.
+ * Problem: Older iOS wifid cannot connect to WPA2/WPA3 transitional networks.
  * The RSN IE parser extracts all AKM suite selectors, including SAE (type 8)
  * which iOS 10 doesn't understand. Two downstream functions break:
  *   1. Security type evaluator picks the highest AKM (8), fails the range
@@ -28,6 +28,15 @@
 #define MAX_KNOWN_AKM 6
 #define TAG "WiFiFixOldiOS"
 
+/* Heuristic thresholds — validated against wifid from iOS 9.3.6, 10.3.4, 12.5.7.
+ * VERSION_MAX_OFFSET: The RSN IE parser references IE_KEY_RSN_VERSION early
+ * (observed: +0xC6 .. +0x104), while _performAssociation references it much
+ * later (+0x402 .. +0x4CC).  A 0x200 cutoff cleanly separates them.
+ * FUNC_BODY_RANGE: Maximum range from function start to scan for secondary
+ * string references (AUTHSELS observed at +0x30A .. +0x3CC). */
+#define VERSION_MAX_OFFSET  0x200
+#define FUNC_BODY_RANGE     0x800
+
 /* ── Mach-O helpers ── */
 
 #ifdef __LP64__
@@ -37,7 +46,6 @@ typedef struct segment_command_64  segment_command_t;
 #define LC_SEGMENT_T  LC_SEGMENT_64
 #define CFSTR_STRIDE  32
 #define CFSTR_STR_OFF 16
-#define PTR_SIZE      8
 #else
 typedef struct mach_header         mach_header_t;
 typedef struct section             section_t;
@@ -45,7 +53,6 @@ typedef struct segment_command     segment_command_t;
 #define LC_SEGMENT_T  LC_SEGMENT
 #define CFSTR_STRIDE  16
 #define CFSTR_STR_OFF 8
-#define PTR_SIZE      4
 #endif
 
 typedef struct { uintptr_t addr; size_t size; } region_t;
@@ -100,16 +107,20 @@ static uintptr_t findCString(region_t *r, const char *target) {
 
 /* Find CFString whose c_str pointer matches cstr_addr */
 static uintptr_t findCFStr(region_t *cfstr_sect, uintptr_t cstr_addr) {
-    uintptr_t cur = cfstr_sect->addr;
-    uintptr_t end = cur + cfstr_sect->size;
-    while (cur + CFSTR_STRIDE <= end) {
-        uintptr_t ptr = 0;
-        for (int i = 0; i < PTR_SIZE; i++)
-            ptr |= (uintptr_t)((uint8_t *)(cur + CFSTR_STR_OFF))[i] << (i * 8);
-        if (ptr == cstr_addr) return cur;
-        cur += CFSTR_STRIDE;
+    uintptr_t p   = cfstr_sect->addr;
+    uintptr_t end = p + cfstr_sect->size;
+    for (; p + CFSTR_STRIDE <= end; p += CFSTR_STRIDE) {
+        if (*(uintptr_t *)(p + CFSTR_STR_OFF) == cstr_addr)
+            return p;
     }
     return 0;
+}
+
+/* Resolve a C string name to its CFString constant address */
+static uintptr_t resolveCFString(region_t *cstring, region_t *cfstr,
+                                  const char *name) {
+    uintptr_t cstr = findCString(cstring, name);
+    return cstr ? findCFStr(cfstr, cstr) : 0;
 }
 
 /* ── Architecture-specific instruction decoders ── */
@@ -149,26 +160,51 @@ static inline uint16_t movwtImm(uint16_t hw1, uint16_t hw2) {
 static inline bool isAddPC(uint16_t insn) { return (insn & 0xFF78) == 0x4478; }
 static inline uint8_t addPCReg(uint16_t insn) { return ((insn >> 4) & 8) | (insn & 7); }
 
+/*
+ * Scan for movw/movt/add-pc sequences that compute `target`.
+ * The compiler may interleave unrelated instructions between them
+ * (observed on iOS 9.3.6), so we search a small window for each step.
+ */
+#define THUMB2_SCAN_WINDOW 16 /* bytes to search for next instruction */
+
 static uintptr_t findCodeRef(region_t *text, uintptr_t target, uintptr_t after) {
-    const uint8_t *p   = (const uint8_t *)text->addr;
-    const uint8_t *end = p + text->size - 10; /* need at least 10 bytes: 4+4+2 */
-    for (; p <= end; p += 2) {
+    const uint8_t *base = (const uint8_t *)text->addr;
+    const uint8_t *end  = base + text->size;
+    for (const uint8_t *p = base; p + 10 <= end; p += 2) {
         if ((uintptr_t)p <= after) continue;
-        uint16_t hw1a = rd16(p);
-        if (!isMovW(hw1a)) continue;
-        uint16_t hw2a = rd16(p + 2);
-        uint8_t rd = movwtReg(hw2a);
-        uint16_t hw1b = rd16(p + 4);
-        if (!isMovT(hw1b)) continue;
-        uint16_t hw2b = rd16(p + 6);
-        if (movwtReg(hw2b) != rd) continue;
-        uint16_t add_insn = rd16(p + 8);
-        if (!isAddPC(add_insn) || addPCReg(add_insn) != rd) continue;
-        /* Compute effective address: PC at add instruction = addr + 8 + 4 */
-        uint32_t imm32 = (movwtImm(hw1b, hw2b) << 16) | movwtImm(hw1a, hw2a);
-        uintptr_t add_pc = (uintptr_t)(p + 8) + 4; /* Thumb PC = insn + 4 */
-        uintptr_t effective = imm32 + add_pc;
-        if (effective == target) return (uintptr_t)p;
+        uint16_t hw1 = rd16(p);
+        if (!isMovW(hw1)) continue;
+        uint16_t hw2 = rd16(p + 2);
+        uint8_t rd = movwtReg(hw2);
+        uint16_t lo = movwtImm(hw1, hw2);
+
+        /* Search forward for movt to same register */
+        const uint8_t *lim = p + 4 + THUMB2_SCAN_WINDOW;
+        if (lim > end - 4) lim = end - 4;
+        const uint8_t *movt_end = NULL;
+        uint16_t hi = 0;
+        for (const uint8_t *q = p + 4; q <= lim; q += 2) {
+            uint16_t t1 = rd16(q);
+            if (isMovT(t1) && movwtReg(rd16(q + 2)) == rd) {
+                hi = movwtImm(t1, rd16(q + 2));
+                movt_end = q + 4;
+                break;
+            }
+        }
+        if (!movt_end) continue;
+
+        /* Search forward for add Rd, pc */
+        lim = movt_end + THUMB2_SCAN_WINDOW;
+        if (lim > end - 2) lim = end - 2;
+        for (const uint8_t *r = movt_end; r <= lim; r += 2) {
+            uint16_t insn = rd16(r);
+            if (isAddPC(insn) && addPCReg(insn) == rd) {
+                uint32_t imm32 = ((uint32_t)hi << 16) | lo;
+                uintptr_t effective = imm32 + (uintptr_t)r + 4; /* Thumb PC = insn + 4 */
+                if (effective == target) return (uintptr_t)p;
+                break;
+            }
+        }
     }
     return 0;
 }
@@ -279,48 +315,35 @@ static void *findRSN_IE_Parser(void) {
         return NULL;
     }
 
-    /* Locate both CFString constants we need */
-    uintptr_t ver_cstr = findCString(&cstring, "IE_KEY_RSN_VERSION");
-    uintptr_t auth_cstr = findCString(&cstring, "IE_KEY_RSN_AUTHSELS");
-    if (!ver_cstr || !auth_cstr) {
-        syslog(LOG_ERR, TAG ": RSN IE key strings not found in __cstring");
-        return NULL;
-    }
-    uintptr_t ver_cf = findCFStr(&cfstring, ver_cstr);
-    uintptr_t auth_cf = findCFStr(&cfstring, auth_cstr);
+    uintptr_t ver_cf  = resolveCFString(&cstring, &cfstring, "IE_KEY_RSN_VERSION");
+    uintptr_t auth_cf = resolveCFString(&cstring, &cfstring, "IE_KEY_RSN_AUTHSELS");
     if (!ver_cf || !auth_cf) {
-        syslog(LOG_ERR, TAG ": CFString wrappers not found in __cfstring");
+        syslog(LOG_ERR, TAG ": RSN IE key CFStrings not found");
         return NULL;
     }
 
-    syslog(LOG_NOTICE, TAG ": VERSION cfstr=0x%lx  AUTHSELS cfstr=0x%lx",
-           (unsigned long)ver_cf, (unsigned long)auth_cf);
+    syslog(LOG_NOTICE, TAG ": VERSION cfstr=%p  AUTHSELS cfstr=%p",
+           (void *)ver_cf, (void *)auth_cf);
 
-    /* Find code references to VERSION CFString, then verify:
-       1. AUTHSELS is also referenced within the same function
-       2. VERSION appears early (within ~512 bytes of func start) — this
-          distinguishes the RSN IE parser from _performAssociation, which
-          also references both strings but much deeper into the function. */
+    /* Scan for code references to VERSION, then verify it's the parser:
+     *   - VERSION must be near the function start (≤ VERSION_MAX_OFFSET)
+     *   - AUTHSELS must also be referenced within the same function body
+     * This distinguishes the RSN IE parser from _performAssociation, which
+     * also references both strings but much deeper into its body. */
     uintptr_t ref = 0;
     while ((ref = findCodeRef(&text, ver_cf, ref)) != 0) {
         uintptr_t func = findFuncStart(ref, text.addr);
-        if (!func) continue;
+        if (!func || ref - func > VERSION_MAX_OFFSET) continue;
 
-        /* VERSION must be near the function start (parser: ~0xBE, assoc: ~0x8E2) */
-        if (ref - func > 0x200) continue;
+        region_t body = { func, FUNC_BODY_RANGE };
+        if (!findCodeRef(&body, auth_cf, 0)) continue;
 
-        /* AUTHSELS must also be referenced within the function (~1.3KB) */
-        region_t func_region = { .addr = func, .size = 0x800 };
-        if (findCodeRef(&func_region, auth_cf, 0)) {
-            syslog(LOG_NOTICE, TAG ": found RSN IE parser at 0x%lx "
-                   "(VERSION ref at 0x%lx, offset +0x%lx, verified AUTHSELS)",
-                   (unsigned long)func, (unsigned long)ref,
-                   (unsigned long)(ref - func));
-            return FUNC_PTR(func);
-        }
+        syslog(LOG_NOTICE, TAG ": found parseRSN_IE at %p (VERSION +0x%lx)",
+               (void *)func, (unsigned long)(ref - func));
+        return FUNC_PTR(func);
     }
 
-    syslog(LOG_ERR, TAG ": no function references both VERSION and AUTHSELS");
+    syslog(LOG_ERR, TAG ": could not locate parseRSN_IE");
     return NULL;
 }
 

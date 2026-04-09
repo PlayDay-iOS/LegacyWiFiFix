@@ -42,12 +42,12 @@ RUN CI=1 bash -c "$(curl -fsSL https://raw.githubusercontent.com/theos/theos/mas
 # 4. Remove auto-downloaded SDKs
 RUN rm -rf $THEOS/sdks/*.sdk
 
-# 5. Install iPhoneOS 10.3 SDK
-RUN $THEOS/bin/install-sdk iPhoneOS10.3
+# 5. Install iPhoneOS 12.4 SDK
+RUN $THEOS/bin/install-sdk iPhoneOS12.4
 
 # 6. Strip i386/x86_64 from top-level TBD archs so the linker doesn't
 #    mistake them for simulator libs (theos/sdks#56, still open).
-RUN find $THEOS/sdks/iPhoneOS10.3.sdk -name '*.tbd' -exec sed -i \
+RUN find $THEOS/sdks/iPhoneOS12.4.sdk -name '*.tbd' -exec sed -i \
         -e '/^archs:/s/, x86_64//g' \
         -e '/^archs:/s/x86_64, //g' \
         -e '/^archs:/s/, i386//g' \
