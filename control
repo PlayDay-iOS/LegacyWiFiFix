@@ -1,6 +1,6 @@
 Package: dev.playday3008.wififixoldios
 Name: WiFi Fix Old iOS
-Version: 0.0.1
+Version: 0.1.0
 Architecture: iphoneos-arm
 Description: Fixes WiFi connectivity to WPA2/WPA3 transitional networks on iOS 10.x by filtering unsupported AKM suites from RSN IE parsing.
 Maintainer: PlayDay
