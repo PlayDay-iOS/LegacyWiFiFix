@@ -245,8 +245,9 @@ static uintptr_t findFuncStart(uintptr_t ref, uintptr_t text_start) {
     uintptr_t limit = (cur > text_start + 0x10000) ? cur - 0x10000 : text_start;
     while (cur >= limit) {
         uint32_t insn = rd32((const uint8_t *)cur);
-        /* stp x29, x30, [sp, #-N]!  (sign of function prologue) */
-        if ((insn & 0xFFE07FFF) == 0xA9807BFD) return cur;
+        /* stp x29, x30, [sp, #imm]! (pre-index, sign of function prologue)
+           mask 0xFFC07FFF zeros imm7 bits [21:15] */
+        if ((insn & 0xFFC07FFF) == 0xA9807BFD) return cur;
         /* sub sp, sp, #N (alternate prologue start) */
         if ((insn & 0xFFC003FF) == 0xD10003FF) return cur;
         cur -= 4;
