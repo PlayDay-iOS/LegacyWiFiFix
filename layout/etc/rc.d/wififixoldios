@@ -1,0 +1,4 @@
+#!/bin/sh
+# After jailbreak activation on boot, wifid is already running without
+# Substrate injection.  Kill it so launchd restarts it with the tweak.
+killall -9 wifid 2>/dev/null || true
