@@ -1,19 +1,49 @@
 # WiFi Fix Old iOS
 
-Fixes WiFi connectivity to WPA2/WPA3 transitional networks on iOS 9.x–12.x.
+Fixes the RSN IE AKM-selection bug on iOS 3.x–12.x so transitional
+WPA2/WPA3 networks (AP advertises both PSK and SAE) become associable
+with a supported AKM (e.g. WPA2-PSK).
 
-Modern routers using WPA2/WPA3 transitional mode advertise both PSK (AKM 2)
-and SAE (AKM 8) in their RSN Information Element. Older iOS `wifid` doesn't
-recognize AKM 8, causing two failures:
+## The bug
 
-1. The security type evaluator picks the highest AKM (8), which is out of the
-   known range (1-6), marking the network security as unknown.
-2. The association RSN element builder selects AKM 8, hits the default switch
-   case, and aborts with error `-0xF3C`.
+Modern routers in WPA2/WPA3 transitional mode advertise both PSK (AKM 2)
+and SAE (AKM 8) in the same RSN Information Element. Inside the AKM
+selector (e.g. `_performAssociation`), iOS iterates `IE_KEY_RSN_AUTHSELS`
+tracking the "best" AKM. When either the current best or the new candidate
+is outside the table-driven range, the comparison falls back to raw value,
+so a later unknown AKM (SAE = 8) overwrites an earlier known one (PSK = 2).
+The switch on the selected AKM then hits `default:` and returns error
+`-0xF3C`. Result: the whole network is refused even though WPA2-PSK would
+have worked.
 
-This tweak hooks the RSN IE parser and strips unknown AKM types (>= 7) after
-parsing, so all downstream code only sees AKMs it understands. WPA2-PSK
-association then proceeds normally.
+The accepted AKM range depends on the iOS version. The table below comes
+from Ghidra decompilation of the switch inside `_performAssociation` in
+stock `wifid` / `WiFiManager`:
+
+| iOS         | Switch cases present | Max AKM |
+|-------------|----------------------|---------|
+| 3.x – 5.x   | 1, 2                 | 2       |
+| 6.x – 7.x   | 1, 2, 3, 4           | 4       |
+| 8.x – 12.x  | 1, 2, 3, 4, 5, 6     | 6       |
+
+Verified directly against 3.1.3, 4.2.1, 4.3.5, 5.1.1, 6.1.6, 7.1.2,
+8.4.1, 9.3.6, 10.3.3, 10.3.4, 11.4.1 and 12.5.8 binaries — every
+major from iOS 3 through iOS 12 has at least one sampled point
+release. The runtime picks `MAX_KNOWN_AKM` from
+`kCFCoreFoundationVersionNumber`: ≥ iOS 8.0 → 6, ≥ iOS 6.0 → 4, else 2.
+
+iOS 12.5.x added an explicit `(akm − 1) < 6` guard inside
+`_performAssociation`'s main RSN loop, but a sibling function
+(`FUN_100170a60` in 12.5.8 wifid) still uses the unguarded pattern and
+rejects via its own 1..6 switch. The tweak is therefore still needed on
+iOS 12.
+
+## The fix
+
+Hook `parseRSN_IE` and drop AKMs outside `1..MAX_KNOWN_AKM` from
+`IE_KEY_RSN_AUTHSELS` before downstream code reads it. `MAX_KNOWN_AKM` is
+chosen at load time from `kCFCoreFoundationVersionNumber` (`2` on iOS ≤ 5,
+`4` on iOS 6 – 7, `6` on iOS ≥ 8).
 
 ## Building
 
@@ -73,23 +103,44 @@ scp packages/*.deb root@<device>:/tmp/
 ssh root@<device> 'dpkg -i /tmp/dev.playday3008.wififixoldios_*.deb'
 ```
 
-Then restart wifid (or reboot):
+The postinst script restarts `wifid` automatically so Substrate injects
+into the new process — no `ldrestart` or reboot needed.
+
+## Testing
+
+A host-side harness runs the finder against real `wifid` /
+`WiFiManager.bundle` binaries extracted from IPSWs, for every sampled
+iOS version and every supported architecture (armv6, armv7, arm64).
+It builds `test_finder.c` three times against stub Mach-O headers,
+then invokes each build against its fixture and checks the resolved
+parser address matches the expected VA.
+
+Point `FIXTURES_DIR` at the root of your extracted IPSW tree and run:
 
 ```sh
-ldrestart
+FIXTURES_DIR=/path/to/ipsws test/run_tests.sh
 ```
+
+Missing fixtures are reported as `SKIP`, so the suite can be run with a
+partial set. The expected addresses in `test/run_tests.sh` come from
+Ghidra decompilation of the stock binaries and must match exactly.
 
 ## How it works
 
-The tweak dynamically locates wifid's RSN IE parser at runtime by:
+The tweak injects into both `wifid` and the `WiFiManager.bundle` —
+whichever image hosts the RSN IE parser on the running iOS version —
+and locates the parser dynamically at runtime by:
 
 1. Parsing the Mach-O header to find `__cstring` and `__cfstring` sections
 2. Locating the CFString constants for `IE_KEY_RSN_VERSION` and
    `IE_KEY_RSN_AUTHSELS`
-3. Decoding ARM instruction sequences (`movw`/`movt`/`add pc` on Thumb-2,
-   `adrp`/`add` on AArch64) to find code that references these constants
+3. Decoding ARM instruction sequences to find code that references those
+   constants — `ldr`-literal + `add pc` (ARM-mode armv6 and Thumb-16 on
+   iOS 4.x, with their respective encodings), `movw`/`movt` + `add pc`
+   on Thumb-2, and `adrp`/`add` (or linker-relaxed `adr`) on AArch64
 4. Using a proximity heuristic to distinguish the parser from other functions
    that reference the same strings
 
-After hooking, any AKM suite selector >= 7 is stripped from the parsed RSN IE,
-leaving only AKMs that older iOS understands (1-6).
+After hooking, AKM suite selectors above the per-version `MAX_KNOWN_AKM`
+are stripped from the parsed RSN IE, leaving only AKMs the running iOS
+actually handles.

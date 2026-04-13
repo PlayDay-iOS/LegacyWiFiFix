@@ -1,1 +1,1 @@
-{ Filter = { Executables = ( "wifid" ); }; }
+{ Filter = { Executables = ( "wifid" ); Bundles = ( "com.apple.wifi.WiFiManager" ); }; }

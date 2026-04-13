@@ -15,7 +15,7 @@
       ],
       "settings": {
         "C_Cpp.default.includePath": [
-          "/opt/theos/sdks/iPhoneOS10.3.sdk/usr/include",
+          "/opt/theos/sdks/iPhoneOS12.4.sdk/usr/include",
           "/opt/theos/include"
         ],
         "C_Cpp.default.defines": [
