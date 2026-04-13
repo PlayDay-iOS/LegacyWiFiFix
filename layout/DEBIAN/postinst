@@ -1,3 +1,21 @@
-#!/bin/sh
-# Restart wifid so Substrate injects the tweak into the new process.
-killall -9 wifid 2>/dev/null || true
+#!/bin/bash
+declare -a cydia
+cydia=($CYDIA)
+
+if [ -x /usr/libexec/wifid ] || [ -x /usr/sbin/wifid ]; then
+    # iOS 6+: wifid is a standalone daemon.  Killing it forces launchd
+    # to respawn it, at which point Substrate injects the tweak.
+    killall -9 wifid 2>/dev/null || true
+else
+    # Pre-iOS 6: WiFi logic lives in WiFiManager.bundle loaded by
+    # various processes (SpringBoard, Preferences, etc).  A respring
+    # reloads the bundle with Substrate injection.  Request one via
+    # the package manager's $CYDIA fd protocol if available, else
+    # prompt the user.
+    if [[ ${CYDIA+@} ]]; then
+        eval "echo 'finish:restart' >&${cydia[0]}"
+    else
+        echo "Please respring or reboot to activate WiFi Fix Old iOS."
+    fi
+fi
+exit 0

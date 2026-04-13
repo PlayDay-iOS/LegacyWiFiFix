@@ -31,7 +31,11 @@ typedef struct segment_command     segment_command_t;
 typedef struct { uintptr_t addr; size_t size; } region_t;
 
 /* ── Inline string helpers ──
- * iOS 10.3 SDK TBDs don't export strcmp, so we inline it. */
+ * iOS 10.3 SDK TBDs don't export strcmp; an inline reimplementation
+ * sidesteps the missing symbol and lets the compiler constant-fold
+ * comparisons against string literals.  __builtin_strcmp would work
+ * on recent clang but can still emit a libc call under -O0 / PGO,
+ * so the hand-rolled version is used for safety. */
 
 static inline bool streq(const char *a, const char *b) {
     while (*a && *a == *b) { a++; b++; }
@@ -46,6 +50,10 @@ static bool findSection(const mach_header_t *header, intptr_t slide,
     uintptr_t cursor = (uintptr_t)header + sizeof(mach_header_t);
     for (uint32_t i = 0; i < header->ncmds; i++) {
         struct load_command *lc = (struct load_command *)cursor;
+        /* Guard against malformed headers: a zero cmdsize would spin
+         * forever.  dyld-loaded Apple binaries are well-formed, but
+         * cost of the check is one compare. */
+        if (lc->cmdsize < sizeof(struct load_command)) break;
         if (lc->cmd == LC_SEGMENT_T) {
             segment_command_t *seg = (segment_command_t *)cursor;
             if (streq(seg->segname, segname)) {

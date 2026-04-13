@@ -72,7 +72,7 @@ static uintptr_t findCodeRef(region_t *text, uintptr_t target, uintptr_t after) 
             uint16_t lo = movwtImm(hw1, hw2);
 
             const uint8_t *lim = p + 4 + THUMB2_SCAN_WINDOW;
-            if (lim > end - 4) lim = end - 4;
+            if (lim + 4 > end) lim = end - 4;
             const uint8_t *movt_end = NULL;
             uint16_t hi = 0;
             for (const uint8_t *q = p + 4; q <= lim; q += 2) {
@@ -85,7 +85,7 @@ static uintptr_t findCodeRef(region_t *text, uintptr_t target, uintptr_t after) 
             }
             if (movt_end) {
                 lim = movt_end + THUMB2_SCAN_WINDOW;
-                if (lim > end - 2) lim = end - 2;
+                if (lim + 2 > end) lim = end - 2;
                 for (const uint8_t *r = movt_end; r <= lim; r += 2) {
                     uint16_t insn = rd16(r);
                     if (isAddPC(insn) && addPCReg(insn) == rd) {
@@ -108,7 +108,7 @@ static uintptr_t findCodeRef(region_t *text, uintptr_t target, uintptr_t after) 
             uint32_t pool_val = *(uint32_t *)pool_addr;
 
             const uint8_t *lim = p + 2 + THUMB2_SCAN_WINDOW;
-            if (lim > end - 2) lim = end - 2;
+            if (lim + 2 > end) lim = end - 2;
             for (const uint8_t *r = p + 2; r <= lim; r += 2) {
                 uint16_t insn = rd16(r);
                 if (isAddPC(insn) && addPCReg(insn) == rt) {
@@ -128,7 +128,10 @@ static uintptr_t findFuncStart(uintptr_t ref, uintptr_t text_start) {
     uintptr_t limit = (cur > text_start + 0x4000) ? cur - 0x4000 : text_start;
     while (cur >= limit) {
         uint16_t insn = rd16((const uint8_t *)cur);
-        /* push {r4+, lr}: 0xB5xx with bit 8 (LR) set */
+        /* push {..., lr} with R4 in the register list: opcode 0xB5xx
+         * implies bit 8 (LR) is set; bit 4 of reglist requires R4.
+         * ARM AAPCS callee-saved prologues always save R4 first, so this
+         * reliably identifies function starts in compiler-emitted code. */
         if ((insn & 0xFF00) == 0xB500 && (insn & 0x10))
             return cur;
         /* push.w with LR bit set */
@@ -199,7 +202,7 @@ static uintptr_t findCodeRef(region_t *text, uintptr_t target, uintptr_t after) 
 
         /* Search forward for add Rd, pc, Rd */
         const uint8_t *lim = p + 4 + ARM_SCAN_WINDOW;
-        if (lim > end - 4) lim = end - 4;
+        if (lim + 4 > end) lim = end - 4;
         for (const uint8_t *q = p + 4; q <= lim; q += 4) {
             uint32_t a = rd32(q);
             if (isAddPCReg(a) && addPCRd(a) == rd && addPCRm(a) == rd) {
@@ -284,7 +287,7 @@ static uintptr_t findCodeRef(region_t *text, uintptr_t target, uintptr_t after) 
             int64_t pageOff = adrpImm(insn1);
 
             const uint8_t *lim = p + 4 + AARCH64_SCAN_WINDOW;
-            if (lim > end - 4) lim = end - 4;
+            if (lim + 4 > end) lim = end - 4;
             for (const uint8_t *q = p + 4; q <= lim; q += 4) {
                 uint32_t insn2 = rd32(q);
                 if (!isADD64(insn2)) continue;
@@ -320,7 +323,9 @@ static uintptr_t findFuncStart(uintptr_t ref, uintptr_t text_start) {
         if ((insn & 0xFFC003FF) == 0xD10003FF) {
             for (int off = 4; off <= 32 && cur + off + 4 <= ref; off += 4) {
                 uint32_t next = rd32((const uint8_t *)(cur + off));
-                /* stp x29, x30, [sp, #imm] — any addressing mode */
+                /* stp x29, x30, [sp, #imm] — signed-offset form only
+                 * (mask constrains bits [25:23] = 010; pre-/post-index
+                 * forms are already handled by the earlier check). */
                 if ((next & 0x7FC07FFF) == 0x29007BFD) return cur;
             }
         }

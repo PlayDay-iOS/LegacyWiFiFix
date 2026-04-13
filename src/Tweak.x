@@ -88,7 +88,13 @@ static void filterAuthSels(CFMutableDictionaryRef rsnIE) {
 
     bool didFilter = false;
     for (CFIndex i = 0; i < count; i++) {
-        CFNumberRef num = (CFNumberRef)CFArrayGetValueAtIndex(authSels, i);
+        CFTypeRef elem = CFArrayGetValueAtIndex(authSels, i);
+        if (!elem || CFGetTypeID(elem) != CFNumberGetTypeID()) {
+            didFilter = true;
+            syslog(LOG_NOTICE, TAG ": stripped non-CFNumber element from RSN IE");
+            continue;
+        }
+        CFNumberRef num = (CFNumberRef)elem;
         int32_t akm = 0;
         if (CFNumberGetValue(num, kCFNumberSInt32Type, &akm)
             && akm >= 1 && akm <= g_max_known_akm) {

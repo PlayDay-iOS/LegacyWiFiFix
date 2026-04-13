@@ -6,4 +6,4 @@ Description: Fixes the RSN IE AKM-selection bug on iOS 3.x–12.x: strips AKM su
 Maintainer: PlayDay
 Author: PlayDay
 Section: Tweaks
-Depends: mobilesubstrate (>= 0.9.5000)
+Depends: mobilesubstrate (>= 0.9.3367)
