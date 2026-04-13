@@ -15,7 +15,7 @@ else
     if [[ ${CYDIA+@} ]]; then
         eval "echo 'finish:restart' >&${cydia[0]}"
     else
-        echo "Please respring or reboot to activate WiFi Fix Old iOS."
+        echo "Please respring or reboot to activate Legacy WiFi Fix."
     fi
 fi
 exit 0

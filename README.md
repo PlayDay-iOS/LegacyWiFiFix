@@ -1,4 +1,4 @@
-# WiFi Fix Old iOS
+# Legacy WiFi Fix
 
 Fixes the RSN IE AKM-selection bug on iOS 3.x-12.x so transitional
 WPA2/WPA3 networks (AP advertises both PSK and SAE) become associable
@@ -100,7 +100,7 @@ Copy the `.deb` to the device and install:
 
 ```sh
 scp packages/*.deb root@<device>:/tmp/
-ssh root@<device> 'dpkg -i /tmp/dev.playday3008.wififixoldios_*.deb'
+ssh root@<device> 'dpkg -i /tmp/dev.playday3008.legacywififix_*.deb'
 ```
 
 The postinst script restarts `wifid` automatically so Substrate injects

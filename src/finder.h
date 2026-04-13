@@ -13,7 +13,7 @@
 #include <syslog.h>
 
 #ifndef TAG
-#define TAG "WiFiFixOldiOS"
+#define TAG "LegacyWiFiFix"
 #endif
 
 /* Heuristic thresholds -- validated against wifid/WiFiManager from

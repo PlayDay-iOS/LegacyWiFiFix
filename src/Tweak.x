@@ -1,5 +1,5 @@
 /*
- * WiFi Fix Old iOS -- RSN IE AKM-selection bug fix for iOS 3.x-12.x
+ * Legacy WiFi Fix -- RSN IE AKM-selection bug fix for iOS 3.x-12.x
  *
  * The bug: iOS wifid / WiFiManager iterates IE_KEY_RSN_AUTHSELS tracking
  * the "best" AKM.  When either the running best or a new candidate is
