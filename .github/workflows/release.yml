@@ -58,12 +58,8 @@ jobs:
           fi
           echo "path=$deb" >> "$GITHUB_OUTPUT"
 
-      - name: Create tag
-        run: |
-          tag="${{ steps.version.outputs.tag }}"
-          git tag -a "$tag" -m "$tag"
-          git push origin "$tag"
-
+      # The action creates the tag itself at target_commitish; no manual
+      # `git tag` step (which would need committer identity).
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
@@ -72,4 +68,5 @@ jobs:
           target_commitish: ${{ github.sha }}
           prerelease: ${{ inputs.prerelease }}
           generate_release_notes: true
+          make_latest: ${{ inputs.prerelease && 'false' || 'true' }}
           files: ${{ steps.pkg.outputs.path }}
