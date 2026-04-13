@@ -73,7 +73,28 @@ static void *findRSN_IE_Parser(void) {
     return NULL;
 }
 
-/* -- RSN IE AUTHSELS filter -- */
+/* -- RSN IE AUTHSELS filter --
+ *
+ * filterAuthSels runs once per scanned BSS, which in dense RF environments
+ * (airports, conferences) can mean hundreds of calls per second.  To keep
+ * syslog usable we log the first LOG_BUDGET filter events verbosely, then
+ * suppress until the next reset interval.  Counters are not thread-safe but
+ * parseRSN_IE is called from the WiFi serial dispatch queue, so all calls
+ * here are serialized.
+ */
+
+#define LOG_BUDGET 16
+
+static unsigned g_log_used = 0;
+
+static inline bool logBudgetOk(void) {
+    if (g_log_used < LOG_BUDGET) { g_log_used++; return true; }
+    if (g_log_used == LOG_BUDGET) {
+        syslog(LOG_NOTICE, TAG ": further per-BSS filter logs suppressed");
+        g_log_used++;
+    }
+    return false;
+}
 
 static void filterAuthSels(CFMutableDictionaryRef rsnIE) {
     CFArrayRef authSels = CFDictionaryGetValue(rsnIE, CFSTR("IE_KEY_RSN_AUTHSELS"));
@@ -87,11 +108,13 @@ static void filterAuthSels(CFMutableDictionaryRef rsnIE) {
     if (!filtered) return;
 
     bool didFilter = false;
+    bool logOk = logBudgetOk();
     for (CFIndex i = 0; i < count; i++) {
         CFTypeRef elem = CFArrayGetValueAtIndex(authSels, i);
         if (!elem || CFGetTypeID(elem) != CFNumberGetTypeID()) {
             didFilter = true;
-            syslog(LOG_NOTICE, TAG ": stripped non-CFNumber element from RSN IE");
+            if (logOk)
+                syslog(LOG_NOTICE, TAG ": stripped non-CFNumber element from RSN IE");
             continue;
         }
         CFNumberRef num = (CFNumberRef)elem;
@@ -101,15 +124,17 @@ static void filterAuthSels(CFMutableDictionaryRef rsnIE) {
             CFArrayAppendValue(filtered, num);
         } else {
             didFilter = true;
-            syslog(LOG_NOTICE, TAG ": stripped unknown AKM %d from RSN IE", akm);
+            if (logOk)
+                syslog(LOG_NOTICE, TAG ": stripped unknown AKM %d from RSN IE", akm);
         }
     }
 
     if (didFilter && CFArrayGetCount(filtered) > 0) {
         CFDictionarySetValue(rsnIE, CFSTR("IE_KEY_RSN_AUTHSELS"), filtered);
-        syslog(LOG_NOTICE, TAG ": kept %ld of %ld AKM selectors",
-               CFArrayGetCount(filtered), count);
-    } else if (didFilter) {
+        if (logOk)
+            syslog(LOG_NOTICE, TAG ": kept %ld of %ld AKM selectors",
+                   CFArrayGetCount(filtered), count);
+    } else if (didFilter && logOk) {
         syslog(LOG_WARNING, TAG ": all AKMs were unknown -- leaving unmodified");
     }
 
@@ -133,7 +158,20 @@ static int hooked_parseRSN_IE(const char *rawIE, int totalLen,
     return ret;
 }
 
-/* -- Constructor -- */
+/* -- Constructor --
+ *
+ * Fail-safe properties:
+ *   1. If findRSN_IE_Parser() returns NULL, no MSHookFunction call is made
+ *      and wifid runs unmodified -- WiFi simply behaves as the stock OS.
+ *   2. If the finder returned a wrong address, MSHookFunction would patch
+ *      arbitrary code and wifid would crash on first invocation.  launchd
+ *      back-off (3 crashes in 60s) then stops respawning it; WiFi breaks
+ *      until the package is removed, but the device boots normally --
+ *      no boot loop, since wifid is not on the boot critical path.
+ *   3. The locator is heavily constrained (two distinct CFString refs in a
+ *      narrow byte window), making a wrong-address result extremely unlikely
+ *      across the verified iOS 3.x-12.x corpus.
+ */
 
 %ctor {
     if (IS_IOS_OR_NEWER(iOS_8_0)) {

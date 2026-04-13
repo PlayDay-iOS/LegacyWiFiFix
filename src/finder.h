@@ -9,6 +9,7 @@
 #define FINDER_H
 
 #include "disasm.h"   /* includes macho.h */
+#include <inttypes.h>
 #include <syslog.h>
 
 #ifndef TAG
@@ -31,7 +32,11 @@ static uintptr_t findRSN_IE_ParserInImage(const mach_header_t *header,
     region_t text, cstring, cfstring;
     if (!findSection(header, slide, "__TEXT", "__text",     &text)    ||
         !findSection(header, slide, "__TEXT", "__cstring",  &cstring) ||
-        !findSection(header, slide, "__DATA", "__cfstring", &cfstring)) {
+        /* __cfstring lives in __DATA on legacy iOS; later linkers may
+         * place it in __DATA_CONST.  Try the modern location as a
+         * fallback so the finder keeps working on future iOS revisions. */
+        (!findSection(header, slide, "__DATA",       "__cfstring", &cfstring) &&
+         !findSection(header, slide, "__DATA_CONST", "__cfstring", &cfstring))) {
         syslog(LOG_ERR, TAG ": required Mach-O sections not found");
         return 0;
     }
@@ -43,21 +48,23 @@ static uintptr_t findRSN_IE_ParserInImage(const mach_header_t *header,
         return 0;
     }
 
-    syslog(LOG_NOTICE, TAG ": VERSION cfstr=%p  AUTHSELS cfstr=%p",
-           (void *)ver_cf, (void *)auth_cf);
+    syslog(LOG_NOTICE, TAG ": VERSION cfstr=0x%" PRIxPTR
+                       "  AUTHSELS cfstr=0x%" PRIxPTR,
+           ver_cf, auth_cf);
 
     uintptr_t ref = 0;
     while ((ref = findCodeRef(&text, ver_cf, ref)) != 0) {
         uintptr_t func = findFuncStart(ref, text.addr);
         if (!func) {
-            syslog(LOG_NOTICE, TAG ": skip ref=%p (no prologue found)",
-                   (void *)ref);
+            syslog(LOG_NOTICE, TAG ": skip ref=0x%" PRIxPTR " (no prologue found)",
+                   ref);
             continue;
         }
         if (ref - func > VERSION_MAX_OFFSET) {
-            syslog(LOG_NOTICE, TAG ": skip ref=%p func=%p (VERSION +0x%lx > 0x%x)",
-                   (void *)ref, (void *)func,
-                   (unsigned long)(ref - func), VERSION_MAX_OFFSET);
+            syslog(LOG_NOTICE, TAG ": skip ref=0x%" PRIxPTR
+                               " func=0x%" PRIxPTR
+                               " (VERSION +0x%" PRIxPTR " > 0x%x)",
+                   ref, func, (uintptr_t)(ref - func), VERSION_MAX_OFFSET);
             continue;
         }
 
@@ -66,13 +73,15 @@ static uintptr_t findRSN_IE_ParserInImage(const mach_header_t *header,
             bodySize = text.addr + text.size - func;
         region_t body = { func, bodySize };
         if (!findCodeRef(&body, auth_cf, 0)) {
-            syslog(LOG_NOTICE, TAG ": skip func=%p (AUTHSELS not in body, +0x%lx scan)",
-                   (void *)func, (unsigned long)bodySize);
+            syslog(LOG_NOTICE, TAG ": skip func=0x%" PRIxPTR
+                               " (AUTHSELS not in body, +0x%zx scan)",
+                   func, bodySize);
             continue;
         }
 
-        syslog(LOG_NOTICE, TAG ": found parseRSN_IE at %p (VERSION +0x%lx)",
-               (void *)func, (unsigned long)(ref - func));
+        syslog(LOG_NOTICE, TAG ": found parseRSN_IE at 0x%" PRIxPTR
+                           " (VERSION +0x%" PRIxPTR ")",
+               func, (uintptr_t)(ref - func));
         return func;
     }
 

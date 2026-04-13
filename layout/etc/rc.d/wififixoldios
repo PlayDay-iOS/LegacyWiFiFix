@@ -1,4 +1,13 @@
 #!/bin/sh
-# After jailbreak activation on boot, wifid is already running without
-# Substrate injection.  Kill it so launchd restarts it with the tweak.
-killall -9 wifid 2>/dev/null || true
+# Boot-time activation hook.
+#
+# iOS 6+: wifid is a standalone daemon.  Some jailbreaks activate Substrate
+# after launchd has started services, so wifid may already be running without
+# the tweak.  Killing it forces launchd to respawn it with injection.
+#
+# Pre-iOS 6: WiFi logic lives in WiFiManager.bundle loaded by SpringBoard
+# (and other clients).  Substrate injects SpringBoard at boot before it
+# loads the bundle, so no action is required here.
+if [ -x /usr/libexec/wifid ] || [ -x /usr/sbin/wifid ]; then
+    killall -9 wifid 2>/dev/null || true
+fi

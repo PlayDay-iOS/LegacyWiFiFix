@@ -56,7 +56,8 @@ static inline uint32_t ldrLitOff(uint16_t hw) { return (hw & 0xFF) << 2; }
  *   2. ldr  Rt, [pc, #off]; add Rd, pc          (Thumb-16, iOS 4.x)
  * If `after` is non-zero, only return results at addresses > after.
  */
-#define THUMB2_SCAN_WINDOW 16 /* bytes to search for next instruction */
+#define THUMB2_SCAN_WINDOW  16 /* bytes to search for next instruction */
+#define THUMB16_SCAN_WINDOW 16 /* same window, used by ldr-literal pattern */
 
 static uintptr_t findCodeRef(region_t *text, uintptr_t target, uintptr_t after) {
     const uint8_t *base = (const uint8_t *)text->addr;
@@ -107,7 +108,7 @@ static uintptr_t findCodeRef(region_t *text, uintptr_t target, uintptr_t after) 
             if (pool_addr + 4 > (uintptr_t)end) continue;
             uint32_t pool_val = *(uint32_t *)pool_addr;
 
-            const uint8_t *lim = p + 2 + THUMB2_SCAN_WINDOW;
+            const uint8_t *lim = p + 2 + THUMB16_SCAN_WINDOW;
             if (lim + 2 > end) lim = end - 2;
             for (const uint8_t *r = p + 2; r <= lim; r += 2) {
                 uint16_t insn = rd16(r);

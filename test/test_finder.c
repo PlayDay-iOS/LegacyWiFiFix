@@ -99,9 +99,7 @@ int main(int argc, char **argv) {
         struct load_command *lc = (struct load_command *)cursor;
         if (lc->cmd == LC_SEGMENT_T) {
             segment_command_t *seg = (segment_command_t *)cursor;
-            if (seg->segname[0] == '_' && seg->segname[1] == '_' &&
-                seg->segname[2] == 'T' && seg->segname[3] == 'E' &&
-                seg->segname[4] == 'X' && seg->segname[5] == 'T') {
+            if (streq(seg->segname, "__TEXT")) {
                 text_vmaddr = seg->vmaddr;
                 break;
             }

@@ -93,7 +93,11 @@ static uintptr_t findCString(region_t *r, const char *target) {
     return 0;
 }
 
-/* Find CFString whose c_str pointer matches cstr_addr */
+/* Find CFString whose c_str pointer matches cstr_addr.
+ * The __cfstring section is laid out as an array of CFConstStringClassReference
+ * structs (CFSTR_STRIDE bytes each, naturally aligned at section start), so
+ * the c_str pointer at offset CFSTR_STR_OFF is always pointer-aligned.  The
+ * cast below relies on that alignment guarantee. */
 static uintptr_t findCFStr(region_t *cfstr_sect, uintptr_t cstr_addr) {
     uintptr_t p   = cfstr_sect->addr;
     uintptr_t end = p + cfstr_sect->size;
