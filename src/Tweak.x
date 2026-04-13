@@ -1,5 +1,5 @@
 /*
- * WiFi Fix Old iOS — RSN IE AKM-selection bug fix for iOS 3.x–12.x
+ * WiFi Fix Old iOS -- RSN IE AKM-selection bug fix for iOS 3.x-12.x
  *
  * The bug: iOS wifid / WiFiManager iterates IE_KEY_RSN_AUTHSELS tracking
  * the "best" AKM.  When either the running best or a new candidate is
@@ -7,16 +7,16 @@
  * so a later unknown AKM (e.g. SAE = 8) overwrites an earlier known one
  * (e.g. PSK = 2).  The switch on the selected AKM then hits `default:`
  * and returns 0xFFFFF0C4 (-0xF3C), rejecting any network that advertises
- * an unrecognised AKM alongside a supported one — WPA2/WPA3 transitional
+ * an unrecognised AKM alongside a supported one -- WPA2/WPA3 transitional
  * being the common case on modern APs.
  *
  * The supported AKM range depends on the iOS version (verified via
- * Ghidra against stock wifid/WiFiManager — the switch over the
+ * Ghidra against stock wifid/WiFiManager -- the switch over the
  * selected AKM value inside _performAssociation):
  *
- *   iOS 3.x – 5.x : switch handles AKMs 1..2  (FT not yet shipped)
- *   iOS 6.x – 7.x : switch handles AKMs 1..4  (FT added)
- *   iOS 8.x – 12.x: switch handles AKMs 1..6  (SHA256 variants added)
+ *   iOS 3.x - 5.x : switch handles AKMs 1..2  (FT not yet shipped)
+ *   iOS 6.x - 7.x : switch handles AKMs 1..4  (FT added)
+ *   iOS 8.x - 12.x: switch handles AKMs 1..6  (SHA256 variants added)
  *
  * iOS 12.5.x added an explicit `(akm - 1) < 6` guard inside
  * _performAssociation's RSN loop, but a sibling function (FUN_100170a60
@@ -26,7 +26,7 @@
  * The fix: hook parseRSN_IE and drop AKMs outside 1..MAX_KNOWN_AKM from
  * IE_KEY_RSN_AUTHSELS before downstream code iterates it.  MAX_KNOWN_AKM
  * is picked at load time from kCFCoreFoundationVersionNumber: 2 on
- * iOS ≤ 5, 4 on iOS 6..7, 6 on iOS ≥ 8.
+ * iOS <= 5, 4 on iOS 6..7, 6 on iOS >= 8.
  *
  * AKM values (IEEE 802.11-2020 Table 9-151):
  *   1 = 802.1X (WPA2-Enterprise)      5 = 802.1X-SHA256
@@ -51,7 +51,7 @@
  * version (see file header for the per-version table). */
 static int g_max_known_akm = 6;
 
-/* ── Dynamic function locator ── */
+/* -- Dynamic function locator -- */
 
 static void *findRSN_IE_Parser(void) {
     uint32_t count = _dyld_image_count();
@@ -73,7 +73,7 @@ static void *findRSN_IE_Parser(void) {
     return NULL;
 }
 
-/* ── RSN IE AUTHSELS filter ── */
+/* -- RSN IE AUTHSELS filter -- */
 
 static void filterAuthSels(CFMutableDictionaryRef rsnIE) {
     CFArrayRef authSels = CFDictionaryGetValue(rsnIE, CFSTR("IE_KEY_RSN_AUTHSELS"));
@@ -110,13 +110,13 @@ static void filterAuthSels(CFMutableDictionaryRef rsnIE) {
         syslog(LOG_NOTICE, TAG ": kept %ld of %ld AKM selectors",
                CFArrayGetCount(filtered), count);
     } else if (didFilter) {
-        syslog(LOG_WARNING, TAG ": all AKMs were unknown — leaving unmodified");
+        syslog(LOG_WARNING, TAG ": all AKMs were unknown -- leaving unmodified");
     }
 
     CFRelease(filtered);
 }
 
-/* ── Hook ── */
+/* -- Hook -- */
 
 typedef int (*rsn_ie_parser_t)(const char *, int, CFMutableDictionaryRef);
 static rsn_ie_parser_t orig_parseRSN_IE;
@@ -133,7 +133,7 @@ static int hooked_parseRSN_IE(const char *rawIE, int totalLen,
     return ret;
 }
 
-/* ── Constructor ── */
+/* -- Constructor -- */
 
 %ctor {
     if (IS_IOS_OR_NEWER(iOS_8_0)) {
@@ -143,12 +143,12 @@ static int hooked_parseRSN_IE(const char *rawIE, int totalLen,
     } else {
         g_max_known_akm = 2;
     }
-    syslog(LOG_NOTICE, TAG ": CFVersion=%.1f → max known AKM = %d",
+    syslog(LOG_NOTICE, TAG ": CFVersion=%.1f -> max known AKM = %d",
            kCFCoreFoundationVersionNumber, g_max_known_akm);
 
     void *target = findRSN_IE_Parser();
     if (!target) {
-        syslog(LOG_ERR, TAG ": could not locate RSN IE parser — hook not installed");
+        syslog(LOG_ERR, TAG ": could not locate RSN IE parser -- hook not installed");
         return;
     }
 

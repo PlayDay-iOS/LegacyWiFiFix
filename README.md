@@ -1,6 +1,6 @@
 # WiFi Fix Old iOS
 
-Fixes the RSN IE AKM-selection bug on iOS 3.x–12.x so transitional
+Fixes the RSN IE AKM-selection bug on iOS 3.x-12.x so transitional
 WPA2/WPA3 networks (AP advertises both PSK and SAE) become associable
 with a supported AKM (e.g. WPA2-PSK).
 
@@ -22,17 +22,17 @@ stock `wifid` / `WiFiManager`:
 
 | iOS         | Switch cases present | Max AKM |
 |-------------|----------------------|---------|
-| 3.x – 5.x   | 1, 2                 | 2       |
-| 6.x – 7.x   | 1, 2, 3, 4           | 4       |
-| 8.x – 12.x  | 1, 2, 3, 4, 5, 6     | 6       |
+| 3.x - 5.x   | 1, 2                 | 2       |
+| 6.x - 7.x   | 1, 2, 3, 4           | 4       |
+| 8.x - 12.x  | 1, 2, 3, 4, 5, 6     | 6       |
 
 Verified directly against 3.1.3, 4.2.1, 4.3.5, 5.1.1, 6.1.6, 7.1.2,
-8.4.1, 9.3.6, 10.3.3, 10.3.4, 11.4.1 and 12.5.8 binaries — every
+8.4.1, 9.3.6, 10.3.3, 10.3.4, 11.4.1 and 12.5.8 binaries -- every
 major from iOS 3 through iOS 12 has at least one sampled point
 release. The runtime picks `MAX_KNOWN_AKM` from
-`kCFCoreFoundationVersionNumber`: ≥ iOS 8.0 → 6, ≥ iOS 6.0 → 4, else 2.
+`kCFCoreFoundationVersionNumber`: >= iOS 8.0 -> 6, >= iOS 6.0 -> 4, else 2.
 
-iOS 12.5.x added an explicit `(akm − 1) < 6` guard inside
+iOS 12.5.x added an explicit `(akm - 1) < 6` guard inside
 `_performAssociation`'s main RSN loop, but a sibling function
 (`FUN_100170a60` in 12.5.8 wifid) still uses the unguarded pattern and
 rejects via its own 1..6 switch. The tweak is therefore still needed on
@@ -42,8 +42,8 @@ iOS 12.
 
 Hook `parseRSN_IE` and drop AKMs outside `1..MAX_KNOWN_AKM` from
 `IE_KEY_RSN_AUTHSELS` before downstream code reads it. `MAX_KNOWN_AKM` is
-chosen at load time from `kCFCoreFoundationVersionNumber` (`2` on iOS ≤ 5,
-`4` on iOS 6 – 7, `6` on iOS ≥ 8).
+chosen at load time from `kCFCoreFoundationVersionNumber` (`2` on iOS <= 5,
+`4` on iOS 6 - 7, `6` on iOS >= 8).
 
 ## Building
 
@@ -104,7 +104,7 @@ ssh root@<device> 'dpkg -i /tmp/dev.playday3008.wififixoldios_*.deb'
 ```
 
 The postinst script restarts `wifid` automatically so Substrate injects
-into the new process — no `ldrestart` or reboot needed.
+into the new process -- no `ldrestart` or reboot needed.
 
 ## Testing
 
@@ -127,15 +127,15 @@ Ghidra decompilation of the stock binaries and must match exactly.
 
 ## How it works
 
-The tweak injects into both `wifid` and the `WiFiManager.bundle` —
-whichever image hosts the RSN IE parser on the running iOS version —
+The tweak injects into both `wifid` and the `WiFiManager.bundle` --
+whichever image hosts the RSN IE parser on the running iOS version --
 and locates the parser dynamically at runtime by:
 
 1. Parsing the Mach-O header to find `__cstring` and `__cfstring` sections
 2. Locating the CFString constants for `IE_KEY_RSN_VERSION` and
    `IE_KEY_RSN_AUTHSELS`
 3. Decoding ARM instruction sequences to find code that references those
-   constants — `ldr`-literal + `add pc` (ARM-mode armv6 and Thumb-16 on
+   constants -- `ldr`-literal + `add pc` (ARM-mode armv6 and Thumb-16 on
    iOS 4.x, with their respective encodings), `movw`/`movt` + `add pc`
    on Thumb-2, and `adrp`/`add` (or linker-relaxed `adr`) on AArch64
 4. Using a proximity heuristic to distinguish the parser from other functions

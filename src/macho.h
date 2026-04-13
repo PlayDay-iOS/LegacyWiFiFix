@@ -1,5 +1,5 @@
 /*
- * macho.h — Mach-O section lookup and CFString resolution helpers
+ * macho.h -- Mach-O section lookup and CFString resolution helpers
  */
 
 #ifndef MACHO_H
@@ -9,7 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* ── Arch-dependent Mach-O types ── */
+/* -- Arch-dependent Mach-O types -- */
 
 #ifdef __LP64__
 typedef struct mach_header_64      mach_header_t;
@@ -30,7 +30,7 @@ typedef struct segment_command     segment_command_t;
 /* Address + size pair describing a loaded section */
 typedef struct { uintptr_t addr; size_t size; } region_t;
 
-/* ── Inline string helpers ──
+/* -- Inline string helpers --
  * iOS 10.3 SDK TBDs don't export strcmp; an inline reimplementation
  * sidesteps the missing symbol and lets the compiler constant-fold
  * comparisons against string literals.  __builtin_strcmp would work
@@ -42,7 +42,7 @@ static inline bool streq(const char *a, const char *b) {
     return *a == *b;
 }
 
-/* ── Section lookup ── */
+/* -- Section lookup -- */
 
 static bool findSection(const mach_header_t *header, intptr_t slide,
                         const char *segname, const char *sectname,
@@ -72,7 +72,7 @@ static bool findSection(const mach_header_t *header, intptr_t slide,
     return false;
 }
 
-/* ── String / CFString resolution ── */
+/* -- String / CFString resolution -- */
 
 /* Find a NUL-terminated C string in a region */
 static uintptr_t findCString(region_t *r, const char *target) {

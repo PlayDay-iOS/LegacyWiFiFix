@@ -1,10 +1,10 @@
 /*
- * disasm.h — Architecture-specific instruction decoders for finding
+ * disasm.h -- Architecture-specific instruction decoders for finding
  *            code references to known addresses in __text.
  *
  * Provides two functions with identical signatures on both architectures:
- *   findCodeRef()  — find code that materializes a given address
- *   findFuncStart() — walk backwards to find the function prologue
+ *   findCodeRef()  -- find code that materializes a given address
+ *   findFuncStart() -- walk backwards to find the function prologue
  *
  * Also provides FUNC_PTR() to convert a raw address to a callable pointer.
  */
@@ -15,7 +15,7 @@
 #include "macho.h"
 
 #if defined(__arm__) && __ARM_ARCH >= 7
-/* ── Thumb-2 / Thumb-16 (armv7) ──
+/* -- Thumb-2 / Thumb-16 (armv7) --
  *
  * Pattern: movw Rd, #lo; [interleaved insns]; movt Rd, #hi; [...]; add Rd, pc
  *
@@ -65,7 +65,7 @@ static uintptr_t findCodeRef(region_t *text, uintptr_t target, uintptr_t after) 
         if ((uintptr_t)p <= after) continue;
         uint16_t hw1 = rd16(p);
 
-        /* ── Pattern 1: movw / movt / add-pc (Thumb-2) ── */
+        /* -- Pattern 1: movw / movt / add-pc (Thumb-2) -- */
         if (isMovW(hw1) && p + 10 <= end) {
             uint16_t hw2 = rd16(p + 2);
             uint8_t rd = movwtReg(hw2);
@@ -98,7 +98,7 @@ static uintptr_t findCodeRef(region_t *text, uintptr_t target, uintptr_t after) 
             }
         }
 
-        /* ── Pattern 2: ldr Rt, [pc, #imm8*4] / add Rd, pc (Thumb-16) ── */
+        /* -- Pattern 2: ldr Rt, [pc, #imm8*4] / add Rd, pc (Thumb-16) -- */
         if (isLdrLiteral16(hw1)) {
             uint8_t rt = ldrLitReg(hw1);
             uint32_t off = ldrLitOff(hw1);
@@ -147,7 +147,7 @@ static uintptr_t findFuncStart(uintptr_t ref, uintptr_t text_start) {
 #define FUNC_PTR(addr) ((void *)((addr) | 1)) /* set Thumb bit */
 
 #elif defined(__arm__)
-/* ── ARM mode (armv6) ──
+/* -- ARM mode (armv6) --
  *
  * Pattern: ldr Rd, [pc, #imm12]; [...]; add Rd, pc, Rd
  *
@@ -232,12 +232,12 @@ static uintptr_t findFuncStart(uintptr_t ref, uintptr_t text_start) {
 #define FUNC_PTR(addr) ((void *)(addr)) /* ARM mode: no Thumb bit */
 
 #elif defined(__arm64__) || defined(__aarch64__)
-/* ── AArch64 ──
+/* -- AArch64 --
  *
  * Two patterns are recognized:
  *   1. adrp Xd, #page; add Xd, Xd, #offset
  *   2. adr  Xd, label                   (linker-relaxed from adrp+add when
- *                                        the target is within ±1 MiB)
+ *                                        the target is within +/-1 MiB)
  *
  * adrp: (insn & 0x9F000000) == 0x90000000  (bit 31 = 1)
  * adr:  (insn & 0x9F000000) == 0x10000000  (bit 31 = 0)
@@ -280,7 +280,7 @@ static uintptr_t findCodeRef(region_t *text, uintptr_t target, uintptr_t after) 
         if ((uintptr_t)p <= after) continue;
         uint32_t insn1 = rd32(p);
 
-        /* ── Pattern 1: adrp + add ── */
+        /* -- Pattern 1: adrp + add -- */
         if (isADRP(insn1) && p + 8 <= end) {
             uint8_t rd = regD(insn1);
             uintptr_t page = (uintptr_t)p & ~(uintptr_t)0xFFF;
@@ -299,7 +299,7 @@ static uintptr_t findCodeRef(region_t *text, uintptr_t target, uintptr_t after) 
             continue;
         }
 
-        /* ── Pattern 2: adr (linker-relaxed adrp+add) ── */
+        /* -- Pattern 2: adr (linker-relaxed adrp+add) -- */
         if (isADR(insn1)) {
             uintptr_t effective = (uintptr_t)p + (intptr_t)adrImm(insn1);
             if (effective == target) return (uintptr_t)p;
@@ -319,11 +319,11 @@ static uintptr_t findFuncStart(uintptr_t ref, uintptr_t text_start) {
         /* sub sp, sp, #N is a prologue only if followed by stp x29, x30
            within 8 instructions (large functions save many callee-saved
            registers before saving fp/lr, e.g. stp x28, x27; stp x26, x25;
-           ...; stp x29, x30 — observed up to 6 instructions on iOS 10.3.3). */
+           ...; stp x29, x30 -- observed up to 6 instructions on iOS 10.3.3). */
         if ((insn & 0xFFC003FF) == 0xD10003FF) {
             for (int off = 4; off <= 32 && cur + off + 4 <= ref; off += 4) {
                 uint32_t next = rd32((const uint8_t *)(cur + off));
-                /* stp x29, x30, [sp, #imm] — signed-offset form only
+                /* stp x29, x30, [sp, #imm] -- signed-offset form only
                  * (mask constrains bits [25:23] = 010; pre-/post-index
                  * forms are already handled by the earlier check). */
                 if ((next & 0x7FC07FFF) == 0x29007BFD) return cur;

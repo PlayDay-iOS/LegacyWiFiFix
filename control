@@ -2,7 +2,7 @@ Package: dev.playday3008.wififixoldios
 Name: WiFi Fix Old iOS
 Version: 0.2.0
 Architecture: iphoneos-arm
-Description: Fixes the RSN IE AKM-selection bug on iOS 3.x–12.x: strips AKM suites outside the range the OS supports (1..2 on iOS 3-5, 1..4 on iOS 6-7, 1..6 on iOS 8+) from IE_KEY_RSN_AUTHSELS so the AKM selector picks a supported AKM instead of being poisoned by a later unknown one (e.g. SAE=8). Restores association with WPA2/WPA3 transitional networks.
+Description: Fixes the RSN IE AKM-selection bug on iOS 3.x-12.x: strips AKM suites outside the range the OS supports (1..2 on iOS 3-5, 1..4 on iOS 6-7, 1..6 on iOS 8+) from IE_KEY_RSN_AUTHSELS so the AKM selector picks a supported AKM instead of being poisoned by a later unknown one (e.g. SAE=8). Restores association with WPA2/WPA3 transitional networks.
 Maintainer: PlayDay
 Author: PlayDay
 Section: Tweaks

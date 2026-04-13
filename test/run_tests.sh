@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ── Configuration ──
+# -- Configuration --
 # Set FIXTURES_DIR to the root of your extracted IPSW directory tree.
 # Each entry below gives: test-binary fixture-path expected-vaddr
 FIXTURES_DIR="${FIXTURES_DIR:-/mnt/stuff/Downloads/IPSW}"
@@ -47,19 +47,19 @@ run_test() {
     fi
 }
 
-# armv6 — WiFiManager.bundle
+# armv6 -- WiFiManager.bundle
 run_test test_armv6 \
     "$FIXTURES_DIR/iPhone1,1_3.1.3_7E18_Restore/018-6482-014.out/SUNorthstarTwo7E18.iPhoneOS/System/Library/SystemConfiguration/WiFiManager.bundle/WiFiManager" \
     0x00023ed4 "iOS 3.1.3 armv6"
 
 # iOS 4.2.1 is identical binary to 3.1.3, skip
 
-# armv7 Thumb-16 — WiFiManager.bundle
+# armv7 Thumb-16 -- WiFiManager.bundle
 run_test test_armv7 \
     "$FIXTURES_DIR/iPhone2,1_4.3.5_8L1_Restore/038-2287-002.out/Durango8L1.N88OS/System/Library/SystemConfiguration/WiFiManager.bundle/WiFiManager" \
     0x0002d8f8 "iOS 4.3.5 armv7-thumb16"
 
-# armv7 Thumb-2 — wifid
+# armv7 Thumb-2 -- wifid
 run_test test_armv7 \
     "$FIXTURES_DIR/iPhone2,1_5.1.1_9B206_Restore/038-4355-009.out/Hoodoo9B206.N88OS/usr/sbin/wifid" \
     0x0004053c "iOS 5.1.1 armv7"

@@ -1,7 +1,7 @@
 /*
- * test_finder.c — Host-side test for the RSN IE parser finder.
+ * test_finder.c -- Host-side test for the RSN IE parser finder.
  *
- * Compile (32-bit targets — armv6/armv7):
+ * Compile (32-bit targets -- armv6/armv7):
  *   gcc -m32 -I test/compat -I src \
  *       -D__arm__ -D__ARM_ARCH=6 \
  *       -DTEST -o test_armv6 test/test_finder.c
@@ -10,7 +10,7 @@
  *       -D__arm__ -D'__ARM_ARCH=7' \
  *       -DTEST -o test_armv7 test/test_finder.c
  *
- * Compile (64-bit target — arm64):
+ * Compile (64-bit target -- arm64):
  *   gcc -I test/compat -I src \
  *       -D__arm64__ -D__LP64__ \
  *       -DTEST -o test_arm64 test/test_finder.c
@@ -30,7 +30,7 @@
 #include <unistd.h>
 #include <stdarg.h>
 
-/* Stub out syslog — just print to stderr in test mode */
+/* Stub out syslog -- just print to stderr in test mode */
 #define LOG_ERR     3
 #define LOG_WARNING 4
 #define LOG_NOTICE  5

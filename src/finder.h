@@ -1,5 +1,5 @@
 /*
- * finder.h — Locate the RSN IE parser function in a Mach-O image.
+ * finder.h -- Locate the RSN IE parser function in a Mach-O image.
  *
  * Returns the raw function start address (without FUNC_PTR conversion),
  * or 0 if not found.  Shared by the tweak and the test harness.
@@ -15,7 +15,7 @@
 #define TAG "WiFiFixOldiOS"
 #endif
 
-/* Heuristic thresholds — validated against wifid/WiFiManager from
+/* Heuristic thresholds -- validated against wifid/WiFiManager from
  * iOS 3.1.3, 4.2.1, 4.3.5, 5.1.1, 6.1.6, 7.1.2, 8.4.1, 9.3.6, 10.3.3,
  * 10.3.4, 11.4.1 and 12.5.8.
  * VERSION_MAX_OFFSET: The RSN IE parser references IE_KEY_RSN_VERSION early
