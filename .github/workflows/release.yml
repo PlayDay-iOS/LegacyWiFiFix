@@ -1,0 +1,75 @@
+name: Release
+
+# Manual-only.  The branch selector in the GitHub Actions UI picks the
+# source ref; the workflow tags + releases from whatever was selected.
+on:
+  workflow_dispatch:
+    inputs:
+      prerelease:
+        description: Mark the GitHub release as a pre-release
+        type: boolean
+        default: false
+
+permissions:
+  contents: write   # required to push the tag and create the release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Read version from control
+        id: version
+        run: |
+          ver=$(awk '/^Version:/ {print $2}' control)
+          if [ -z "$ver" ]; then
+              echo "control file has no Version field" >&2
+              exit 1
+          fi
+          tag="v$ver"
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tag does not already exist
+        run: |
+          tag="${{ steps.version.outputs.tag }}"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null \
+             || git ls-remote --exit-code --tags origin "$tag" >/dev/null 2>&1; then
+              echo "tag $tag already exists -- bump Version in control first" >&2
+              exit 1
+          fi
+
+      - name: Build container image
+        run: docker build -t wififix-build -f Containerfile .
+
+      - name: Build .deb package
+        run: docker run --rm -v "$PWD:/build:Z" wififix-build
+
+      - name: Locate built package
+        id: pkg
+        run: |
+          deb=$(ls packages/*.deb | head -n1)
+          if [ -z "$deb" ]; then
+              echo "no .deb produced under packages/" >&2
+              exit 1
+          fi
+          echo "path=$deb" >> "$GITHUB_OUTPUT"
+
+      - name: Create tag
+        run: |
+          tag="${{ steps.version.outputs.tag }}"
+          git tag -a "$tag" -m "$tag"
+          git push origin "$tag"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          prerelease: ${{ inputs.prerelease }}
+          generate_release_notes: true
+          files: ${{ steps.pkg.outputs.path }}
