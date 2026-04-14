@@ -5,7 +5,7 @@ cydia=($CYDIA)
 if [ -x /usr/libexec/wifid ] || [ -x /usr/sbin/wifid ]; then
     # iOS 6+: wifid is a standalone daemon.  Killing it forces launchd
     # to respawn it, at which point Substrate injects the tweak.
-    killall -9 wifid 2>/dev/null || true
+    killall wifid 2>/dev/null || true
 else
     # Pre-iOS 6: WiFi logic lives in WiFiManager.bundle loaded by
     # various processes (SpringBoard, Preferences, etc).  A respring

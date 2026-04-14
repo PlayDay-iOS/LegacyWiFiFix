@@ -9,5 +9,5 @@
 # (and other clients).  Substrate injects SpringBoard at boot before it
 # loads the bundle, so no action is required here.
 if [ -x /usr/libexec/wifid ] || [ -x /usr/sbin/wifid ]; then
-    killall -9 wifid 2>/dev/null || true
+    killall wifid 2>/dev/null || true
 fi
