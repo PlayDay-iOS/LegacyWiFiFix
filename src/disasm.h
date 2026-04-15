@@ -56,8 +56,11 @@ static inline uint32_t ldrLitOff(uint16_t hw) { return (hw & 0xFF) << 2; }
  *   2. ldr  Rt, [pc, #off]; add Rd, pc          (Thumb-16, iOS 4.x)
  * If `after` is non-zero, only return results at addresses > after.
  */
-#define THUMB2_SCAN_WINDOW  16 /* bytes to search for next instruction */
-#define THUMB16_SCAN_WINDOW 16 /* same window, used by ldr-literal pattern */
+#define THUMB2_SCAN_WINDOW       16      /* bytes to search for next instruction */
+#define THUMB16_SCAN_WINDOW      16      /* same window, used by ldr-literal pattern */
+#define THUMB_PROLOGUE_SCAN_BACK 0x4000  /* max bytes to walk back for function start */
+#define THUMB_PUSH_R4_BIT        0x0010  /* R4 in push reglist (bit 4) */
+#define THUMB_PUSHW_LR_BIT       0x4000  /* LR in push.w reglist (bit 14 of hw2) */
 
 static uintptr_t findCodeRef(region_t *text, uintptr_t target, uintptr_t after) {
     const uint8_t *base = (const uint8_t *)text->addr;
@@ -126,19 +129,21 @@ static uintptr_t findCodeRef(region_t *text, uintptr_t target, uintptr_t after) 
 static uintptr_t findFuncStart(uintptr_t ref, uintptr_t text_start) {
     /* Walk backwards looking for push {.., lr} prologue */
     uintptr_t cur = ref & ~(uintptr_t)1;
-    uintptr_t limit = (cur > text_start + 0x4000) ? cur - 0x4000 : text_start;
+    uintptr_t limit = (cur > text_start + THUMB_PROLOGUE_SCAN_BACK)
+                      ? cur - THUMB_PROLOGUE_SCAN_BACK
+                      : text_start;
     while (cur >= limit) {
         uint16_t insn = rd16((const uint8_t *)cur);
         /* push {..., lr} with R4 in the register list: opcode 0xB5xx
          * implies bit 8 (LR) is set; bit 4 of reglist requires R4.
          * ARM AAPCS callee-saved prologues always save R4 first, so this
          * reliably identifies function starts in compiler-emitted code. */
-        if ((insn & 0xFF00) == 0xB500 && (insn & 0x10))
+        if ((insn & 0xFF00) == 0xB500 && (insn & THUMB_PUSH_R4_BIT))
             return cur;
         /* push.w with LR bit set */
         if (insn == 0xE92D) {
             uint16_t hw2 = rd16((const uint8_t *)(cur + 2));
-            if (hw2 & 0x4000) return cur;
+            if (hw2 & THUMB_PUSHW_LR_BIT) return cur;
         }
         cur -= 2;
     }
@@ -172,9 +177,12 @@ static inline bool isLdrPCImm(uint32_t insn) {
     return (insn & 0x0F7F0000) == 0x051F0000;
 }
 static inline uint8_t ldrPCRd(uint32_t insn) { return (insn >> 12) & 0xF; }
+
+#define ARM_LDR_U_BIT (1u << 23)   /* 1 = add imm, 0 = subtract */
+
 static inline int32_t ldrPCOff(uint32_t insn) {
     int32_t off = insn & 0xFFF;
-    if (!(insn & (1 << 23))) off = -off; /* U bit */
+    if (!(insn & ARM_LDR_U_BIT)) off = -off;
     return off;
 }
 
@@ -184,7 +192,9 @@ static inline bool isAddPCReg(uint32_t insn) {
 static inline uint8_t addPCRd(uint32_t insn) { return (insn >> 12) & 0xF; }
 static inline uint8_t addPCRm(uint32_t insn) { return insn & 0xF; }
 
-#define ARM_SCAN_WINDOW 16 /* bytes (4 instructions) */
+#define ARM_SCAN_WINDOW          16      /* bytes (4 instructions) */
+#define ARM_PROLOGUE_SCAN_BACK   0x4000  /* max bytes to walk back for function start */
+#define ARM_STMDB_LR_BIT         0x4000  /* LR in stmdb reglist (bit 14) */
 
 static uintptr_t findCodeRef(region_t *text, uintptr_t target, uintptr_t after) {
     const uint8_t *base = (const uint8_t *)text->addr;
@@ -220,10 +230,12 @@ static uintptr_t findFuncStart(uintptr_t ref, uintptr_t text_start) {
     /* Walk backwards looking for stmdb sp!, {.., lr} prologue.
      * ARM encoding: (insn & 0x0FFF0000) == 0x092D0000 with LR bit set. */
     uintptr_t cur = ref & ~(uintptr_t)3;
-    uintptr_t limit = (cur > text_start + 0x4000) ? cur - 0x4000 : text_start;
+    uintptr_t limit = (cur > text_start + ARM_PROLOGUE_SCAN_BACK)
+                      ? cur - ARM_PROLOGUE_SCAN_BACK
+                      : text_start;
     while (cur >= limit) {
         uint32_t insn = rd32((const uint8_t *)cur);
-        if ((insn & 0x0FFF0000) == 0x092D0000 && (insn & 0x4000))
+        if ((insn & 0x0FFF0000) == 0x092D0000 && (insn & ARM_STMDB_LR_BIT))
             return cur;
         cur -= 4;
     }
@@ -272,7 +284,9 @@ static inline int64_t adrImm(uint32_t insn)  { return adrImm21(insn); }
 static inline uint32_t addImm12(uint32_t insn) { return (insn >> 10) & 0xFFF; }
 
 /* Scan window: compiler may insert instructions between adrp and add */
-#define AARCH64_SCAN_WINDOW 12 /* bytes (3 instructions) */
+#define AARCH64_SCAN_WINDOW            12      /* bytes (3 instructions) */
+#define AARCH64_PROLOGUE_SCAN_BACK     0x10000 /* max bytes to walk back for function start */
+#define AARCH64_SUBSP_TO_STP_LOOKAHEAD 32      /* max bytes from sub-sp to stp x29,x30 */
 
 static uintptr_t findCodeRef(region_t *text, uintptr_t target, uintptr_t after) {
     const uint8_t *base = (const uint8_t *)text->addr;
@@ -311,7 +325,9 @@ static uintptr_t findCodeRef(region_t *text, uintptr_t target, uintptr_t after) 
 
 static uintptr_t findFuncStart(uintptr_t ref, uintptr_t text_start) {
     uintptr_t cur = ref;
-    uintptr_t limit = (cur > text_start + 0x10000) ? cur - 0x10000 : text_start;
+    uintptr_t limit = (cur > text_start + AARCH64_PROLOGUE_SCAN_BACK)
+                      ? cur - AARCH64_PROLOGUE_SCAN_BACK
+                      : text_start;
     while (cur >= limit) {
         uint32_t insn = rd32((const uint8_t *)cur);
         /* stp x29, x30, [sp, #imm]! (pre-index, function prologue)
@@ -322,7 +338,9 @@ static uintptr_t findFuncStart(uintptr_t ref, uintptr_t text_start) {
            registers before saving fp/lr, e.g. stp x28, x27; stp x26, x25;
            ...; stp x29, x30 -- observed up to 6 instructions on iOS 10.3.3). */
         if ((insn & 0xFFC003FF) == 0xD10003FF) {
-            for (int off = 4; off <= 32 && cur + off + 4 <= ref; off += 4) {
+            for (int off = 4;
+                 off <= AARCH64_SUBSP_TO_STP_LOOKAHEAD && cur + off + 4 <= ref;
+                 off += 4) {
                 uint32_t next = rd32((const uint8_t *)(cur + off));
                 /* stp x29, x30, [sp, #imm] -- signed-offset form only
                  * (mask constrains bits [25:23] = 010; pre-/post-index
