@@ -52,7 +52,18 @@ run_test test_armv6 \
     "$FIXTURES_DIR/iPhone1,1_3.1.3_7E18_Restore/018-6482-014.out/SUNorthstarTwo7E18.iPhoneOS/System/Library/SystemConfiguration/WiFiManager.bundle/WiFiManager" \
     0x00023ed4 "iOS 3.1.3 armv6"
 
-# iOS 4.2.1 is identical binary to 3.1.3, skip
+run_test test_armv6 \
+    "$FIXTURES_DIR/iPhone1,2_4.2.1_8C148_Restore/038-0015-002.out/Jasper8C148.iPhoneOS/System/Library/SystemConfiguration/WiFiManager.bundle/WiFiManager" \
+    0x0002f950 "iOS 4.2.1 armv6"
+
+# armv7 -- WiFiManager.bundle (iPhone 3GS)
+run_test test_armv7 \
+    "$FIXTURES_DIR/iPhone2,1_3.1.2_7D11_Restore/018-6029-014.out/Northstar7D11.N88OS/System/Library/SystemConfiguration/WiFiManager.bundle/WiFiManager" \
+    0x00018fc4 "iOS 3.1.2 armv7"
+
+run_test test_armv7 \
+    "$FIXTURES_DIR/iPhone2,1_3.1.3_7E18_Restore/018-6483-022.out/SUNorthstarTwo7E18.N88OS/System/Library/SystemConfiguration/WiFiManager.bundle/WiFiManager" \
+    0x00018fc4 "iOS 3.1.3 armv7"
 
 # armv7 Thumb-16 -- WiFiManager.bundle
 run_test test_armv7 \
