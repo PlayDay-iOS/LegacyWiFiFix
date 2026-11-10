@@ -26,7 +26,7 @@ stock `wifid` / `WiFiManager`:
 | 6.x - 7.x   | 1, 2, 3, 4           | 4       |
 | 8.x - 12.x  | 1, 2, 3, 4, 5, 6     | 6       |
 
-Verified directly against 3.1.3, 4.2.1, 4.3.5, 5.1.1, 6.1.6, 7.1.2,
+Verified directly against 3.1.2, 3.1.3, 4.2.1, 4.3.5, 5.1.1, 6.1.6, 7.1.2,
 8.4.1, 9.3.6, 10.3.3, 10.3.4, 11.4.1 and 12.5.8 binaries -- every
 major from iOS 3 through iOS 12 has at least one sampled point
 release. The runtime picks `MAX_KNOWN_AKM` from
@@ -103,8 +103,9 @@ scp packages/*.deb root@<device>:/tmp/
 ssh root@<device> 'dpkg -i /tmp/dev.playday3008.legacywififix_*.deb'
 ```
 
-The postinst script restarts `wifid` automatically so Substrate injects
-into the new process -- no `ldrestart` or reboot needed.
+The postinst script restarts the host process (`wifid` on iOS 5+,
+`configd` on iOS 3-4) so Substrate injects into the new instance -- no
+respring, `ldrestart` or reboot needed.
 
 ## Testing
 
@@ -127,9 +128,11 @@ Ghidra decompilation of the stock binaries and must match exactly.
 
 ## How it works
 
-The tweak injects into both `wifid` and the `WiFiManager.bundle` --
-whichever image hosts the RSN IE parser on the running iOS version --
-and locates the parser dynamically at runtime by:
+The tweak injects into `wifid` (iOS 5+) and `configd` (iOS 3-4). On
+iOS 3-4 the parser lives in `WiFiManager.bundle`, a SystemConfiguration
+plugin that `configd` loads after it starts, so the tweak scans each image
+from a dyld add-image callback rather than once at load time. It locates
+the parser dynamically by:
 
 1. Parsing the Mach-O header to find `__cstring` and `__cfstring` sections
 2. Locating the CFString constants for `IE_KEY_RSN_VERSION` and

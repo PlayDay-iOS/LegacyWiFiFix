@@ -37,6 +37,10 @@
  * The hook target is located dynamically by decoding ARM instruction
  * sequences that reference the "IE_KEY_RSN_VERSION" and
  * "IE_KEY_RSN_AUTHSELS" CFString constants.
+ *
+ * Host process: on iOS 5+ the parser lives in /usr/sbin/wifid.  On iOS 3-4
+ * it lives in WiFiManager.bundle, a SystemConfiguration plugin that configd
+ * loads after startup, so the image scan runs from a dyld add-image callback.
  */
 
 #include <substrate.h>
@@ -50,28 +54,6 @@
 /* Runtime-selected max AKM value.  Populated at %ctor from the OS
  * version (see file header for the per-version table). */
 static int g_max_known_akm = 6;
-
-/* -- Dynamic function locator -- */
-
-static void *findRSN_IE_Parser(void) {
-    uint32_t count = _dyld_image_count();
-    syslog(LOG_NOTICE, TAG ": scanning %u loaded images", count);
-    for (uint32_t i = 0; i < count; i++) {
-        const mach_header_t *header =
-            (const mach_header_t *)_dyld_get_image_header(i);
-        if (!header) continue;
-        intptr_t slide = _dyld_get_image_vmaddr_slide(i);
-        const char *name = _dyld_get_image_name(i);
-
-        uintptr_t func = findRSN_IE_ParserInImage(header, slide);
-        if (func) {
-            syslog(LOG_NOTICE, TAG ": located parser in image %u (%s)",
-                   i, name ? name : "(null)");
-            return FUNC_PTR(func);
-        }
-    }
-    return NULL;
-}
 
 /* -- RSN IE AUTHSELS filter --
  *
@@ -158,11 +140,36 @@ static int hooked_parseRSN_IE(const char *rawIE, int totalLen,
     return ret;
 }
 
+/* -- Image-load callback --
+ *
+ * dyld invokes this once for every image already loaded at registration
+ * time, then again for each image loaded later.  The second case matters on
+ * iOS 3-4, where configd dlopen()s WiFiManager.bundle as a plugin well after
+ * the tweak's constructor has run.  dyld serializes these callbacks under
+ * its own lock, so the plain flag needs no further synchronization.
+ */
+
+static bool g_hooked = false;
+
+static void onImageAdded(const struct mach_header *mh, intptr_t slide) {
+    if (g_hooked) return;
+
+    uintptr_t func = findRSN_IE_ParserInImage((const mach_header_t *)mh, slide);
+    if (!func) return;
+
+    g_hooked = true;
+    void *target = FUNC_PTR(func);
+    MSHookFunction(target,
+                   (void *)hooked_parseRSN_IE,
+                   (void **)&orig_parseRSN_IE);
+    syslog(LOG_NOTICE, TAG ": hook installed at %p", target);
+}
+
 /* -- Constructor --
  *
  * Fail-safe properties:
- *   1. If findRSN_IE_Parser() returns NULL, no MSHookFunction call is made
- *      and wifid runs unmodified -- WiFi simply behaves as the stock OS.
+ *   1. If no loaded image contains the parser, no MSHookFunction call is made
+ *      and the host runs unmodified -- WiFi simply behaves as the stock OS.
  *   2. If the finder returned a wrong address, MSHookFunction would patch
  *      arbitrary code and wifid would crash on first invocation.  launchd
  *      back-off (3 crashes in 60s) then stops respawning it; WiFi breaks
@@ -184,15 +191,5 @@ static int hooked_parseRSN_IE(const char *rawIE, int totalLen,
     syslog(LOG_NOTICE, TAG ": CFVersion=%.1f -> max known AKM = %d",
            kCFCoreFoundationVersionNumber, g_max_known_akm);
 
-    void *target = findRSN_IE_Parser();
-    if (!target) {
-        syslog(LOG_ERR, TAG ": could not locate RSN IE parser -- hook not installed");
-        return;
-    }
-
-    MSHookFunction(target,
-                   (void *)hooked_parseRSN_IE,
-                   (void **)&orig_parseRSN_IE);
-
-    syslog(LOG_NOTICE, TAG ": hook installed at %p", target);
+    _dyld_register_func_for_add_image(onImageAdded);
 }
