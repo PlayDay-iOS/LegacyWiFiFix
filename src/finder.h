@@ -17,7 +17,7 @@
 #endif
 
 /* Heuristic thresholds -- validated against wifid/WiFiManager from
- * iOS 3.1.3, 4.2.1, 4.3.5, 5.1.1, 6.1.6, 7.1.2, 8.4.1, 9.3.6, 10.3.3,
+ * iOS 3.1.2, 3.1.3, 4.2.1, 4.3.5, 5.1.1, 6.1.6, 7.1.2, 8.4.1, 9.3.6, 10.3.3,
  * 10.3.4, 11.4.1 and 12.5.8.
  * VERSION_MAX_OFFSET: The RSN IE parser references IE_KEY_RSN_VERSION early
  * (observed: +0xC6 .. +0x108), while _performAssociation references it much
