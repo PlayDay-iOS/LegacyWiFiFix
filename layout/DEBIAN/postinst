@@ -1,21 +1,12 @@
-#!/bin/bash
-declare -a cydia
-cydia=($CYDIA)
-
+#!/bin/sh
+# Restart the process that hosts the RSN IE parser so Substrate injects the
+# tweak into the new instance.  launchd respawns both daemons (KeepAlive).
 if [ -x /usr/libexec/wifid ] || [ -x /usr/sbin/wifid ]; then
-    # iOS 6+: wifid is a standalone daemon.  Killing it forces launchd
-    # to respawn it, at which point Substrate injects the tweak.
+    # iOS 5+: wifid is a standalone daemon.
     killall wifid 2>/dev/null || true
 else
-    # Pre-iOS 6: WiFi logic lives in WiFiManager.bundle loaded by
-    # various processes (SpringBoard, Preferences, etc).  A respring
-    # reloads the bundle with Substrate injection.  Request one via
-    # the package manager's $CYDIA fd protocol if available, else
-    # prompt the user.
-    if [[ ${CYDIA+@} ]]; then
-        eval "echo 'finish:restart' >&${cydia[0]}"
-    else
-        echo "Please respring or reboot to activate Legacy WiFi Fix."
-    fi
+    # iOS 3-4: WiFi logic lives in WiFiManager.bundle, a SystemConfiguration
+    # plugin loaded by configd.
+    killall configd 2>/dev/null || true
 fi
 exit 0
