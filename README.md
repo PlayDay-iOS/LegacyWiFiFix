@@ -107,6 +107,13 @@ The postinst script restarts the host process (`wifid` on iOS 5+,
 `configd` on iOS 3-4) so Substrate injects into the new instance -- no
 respring, `ldrestart` or reboot needed.
 
+At boot, `wifid` usually starts before the jailbreak brings up Substrate.
+A run-once LaunchDaemon (`dev.playday3008.legacywififix`) restarts it so the
+new instance gets the tweak. This relies on the jailbreak loading
+`/Library/LaunchDaemons` after starting Substrate, which iocaste,
+everuntether and aquila do. Jailbreaks that load them earlier (p0laris,
+EverPwnage, lyncis) still need a manual `killall wifid` as root after boot.
+
 ## Testing
 
 A host-side harness runs the finder against real `wifid` /
