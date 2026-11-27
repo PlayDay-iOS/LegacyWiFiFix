@@ -114,6 +114,25 @@ new instance gets the tweak. This relies on the jailbreak loading
 everuntether and aquila do. Jailbreaks that load them earlier (p0laris,
 EverPwnage, lyncis) still need a manual `killall wifid` as root after boot.
 
+### Troubleshooting
+
+If WiFi still fails to join, check that the tweak is loaded: after
+`killall wifid` (as root), syslog should show a `LegacyWiFiFix: CFVersion=...`
+line from `wifid`. If it doesn't, Substrate is not injecting.
+
+On iOS 10 and older, `mobilesubstrate` 0.9.7101 (from MomentumDev and similar
+repos) can fail to start when booted by an untether, so nothing gets injected
+(see [#7](https://github.com/PlayDay-iOS/LegacyWiFiFix/issues/7)). Downgrade
+to 0.9.6301 from saurik's repo and hold it:
+
+```sh
+apt-get install mobilesubstrate=0.9.6301
+apt-mark hold mobilesubstrate
+```
+
+Then reboot. In Cydia, use Downgrade, then Ignore Upgrades on the Cydia
+Substrate page instead.
+
 ## Testing
 
 A host-side harness runs the finder against real `wifid` /
